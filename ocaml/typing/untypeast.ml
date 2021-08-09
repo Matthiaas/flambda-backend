@@ -463,6 +463,19 @@ let expression sub exp =
           sub.expr sub exp2)
     | Texp_array list ->
         Pexp_array (List.map (sub.expr sub) list)
+    | Texp_array_slice list ->
+      Pexp_extension(
+        (Extensions.payload_of_extension_expr ~loc
+          (Extensions.Eexp_arr_slice_extension(
+            List.map (function 
+            | Element e -> Extensions.Element (sub.expr sub e)
+            | Slice e -> Extensions.Slice (sub.expr sub e)
+            ) list))))
+    | Texp_sub_array(e1,e2,e3) -> 
+      Pexp_extension(
+        (Extensions.payload_of_extension_expr ~loc
+          (Extensions.Eexp_sub_array(
+            sub.expr sub e1, sub.expr sub e2, sub.expr sub e3))))
     | Texp_ifthenelse (exp1, exp2, expo) ->
         Pexp_ifthenelse (sub.expr sub exp1,
           sub.expr sub exp2,

@@ -218,6 +218,14 @@ let expr sub {exp_extra; exp_desc; exp_env; _} =
       sub.expr sub exp1;
       sub.expr sub exp2
   | Texp_array list -> List.iter (sub.expr sub) list
+  | Texp_array_slice list -> 
+    List.iter (function 
+    | Element e -> sub.expr sub e 
+    | Slice e -> sub.expr sub e ) list
+  | Texp_sub_array (e1, e2, e3) ->
+      sub.expr sub e1; 
+      sub.expr sub e2;
+      sub.expr sub e3
   | Texp_ifthenelse (exp1, exp2, expo) ->
       sub.expr sub exp1;
       sub.expr sub exp2;

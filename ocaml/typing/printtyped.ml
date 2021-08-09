@@ -385,6 +385,8 @@ and expression i ppf x =
   | Texp_array (l) ->
       line i ppf "Texp_array\n";
       list i expression ppf l;
+  | Texp_array_slice _ -> assert false
+  | Texp_sub_array _ -> assert false
   | Texp_ifthenelse (e1, e2, eo) ->
       line i ppf "Texp_ifthenelse\n";
       expression i ppf e1;

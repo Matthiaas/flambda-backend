@@ -273,6 +273,11 @@ let add_docstring_comment ds =
 
 let comments () = List.rev !comment_list
 
+let reverse lexbuf n =
+  lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - n;
+  let curpos = lexbuf.lex_curr_p in
+  lexbuf.lex_curr_p <- { curpos with pos_cnum = curpos.pos_cnum - n };
+
 (* Error report *)
 
 open Format
@@ -417,6 +422,9 @@ rule token = parse
       { FLOAT (lit, Some modif) }
   | (float_literal | hex_float_literal | int_literal) identchar+ as invalid
       { error lexbuf (Invalid_literal invalid) }
+  | (decimal_literal | hex_literal) as lit '.' '.'
+      { reverse lexbuf 2;
+        INT(lit, None) }
   | "\""
       { let s, loc = wrap_string_lexer string lexbuf in
         STRING (s, loc, None) }
@@ -492,9 +500,7 @@ rule token = parse
   | "*)"
       { let loc = Location.curr lexbuf in
         Location.prerr_warning loc Warnings.Comment_not_end;
-        lexbuf.Lexing.lex_curr_pos <- lexbuf.Lexing.lex_curr_pos - 1;
-        let curpos = lexbuf.lex_curr_p in
-        lexbuf.lex_curr_p <- { curpos with pos_cnum = curpos.pos_cnum - 1 };
+        reverse lexbuf 1;
         STAR
       }
   | "#"

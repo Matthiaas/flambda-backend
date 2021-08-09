@@ -2106,6 +2106,7 @@ let rec is_nonexpansive exp =
   | Texp_function _
   | Texp_probe_is_enabled _
   | Texp_array [] -> true
+  | Texp_array_slice [] -> true
   | Texp_let(_rec_flag, pat_exp_list, body) ->
       List.for_all (fun vb -> is_nonexpansive vb.vb_expr) pat_exp_list &&
       is_nonexpansive body
@@ -2184,12 +2185,14 @@ let rec is_nonexpansive exp =
       [Nolabel, Some e]) ->
      is_nonexpansive e
   | Texp_array (_ :: _)
+  | Texp_array_slice (_ :: _)
   | Texp_apply _
   | Texp_try _
   | Texp_setfield _
   | Texp_while _
   | Texp_list_comprehension _
   | Texp_arr_comprehension _
+  | Texp_sub_array _
   | Texp_for _
   | Texp_send _
   | Texp_instvar _
@@ -2401,6 +2404,7 @@ let check_partial_application statement exp =
             | Texp_ident _ | Texp_constant _ | Texp_tuple _
             | Texp_construct _ | Texp_variant _ | Texp_record _
             | Texp_field _ | Texp_setfield _ | Texp_array _
+            | Texp_array_slice _ | Texp_sub_array _
             | Texp_list_comprehension _ | Texp_arr_comprehension _
             | Texp_while _ | Texp_for _ | Texp_instvar _
             | Texp_setinstvar _ | Texp_override _ | Texp_assert _
@@ -3048,12 +3052,16 @@ and type_expect_
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
   | Pexp_array(sargl) ->
-      let ty = newgenvar() in
-      let to_unify = Predef.type_array ty in
-      with_explanation (fun () ->
-        unify_exp_types loc env to_unify (generic_instance ty_expected));
-      let argl =
-        List.map (fun sarg -> type_expect env sarg (mk_expected ty)) sargl in
+      let argl = type_array
+       ~loc ~env ~ty_expected ~with_explanation
+       (List.map (fun el -> Extensions.Element el) sargl) 
+      in
+      let argl = 
+        List.map (function 
+            | Element e -> e 
+            | _ -> assert false
+          ) argl 
+      in
       re {
         exp_desc = Texp_array argl;
         exp_loc = loc; exp_extra = [];
@@ -3778,10 +3786,18 @@ and type_expect_
                     _ ) as extension)  ->
     if Clflags.is_extension_enabled Clflags.Comprehensions then
       let ext_expr = Extensions.extension_expr_of_payload ~loc extension in
-      type_extension ~loc ~env ~ty_expected ~sexp ext_expr
+      type_extension ~loc ~env ~ty_expected ~sexp ~with_explanation ext_expr
     else
       raise
         (Error (loc, env, Extension_not_enabled(Clflags.Comprehensions)))
+  | Pexp_extension (({ txt = ("extension.arr_slice"); _ },
+                    _ ) as extension)  ->
+    let ext_expr = Extensions.extension_expr_of_payload ~loc extension in
+    type_extension ~loc ~env ~ty_expected ~sexp ~with_explanation ext_expr
+  | Pexp_extension (({ txt = ("extension.sub_arr"); _ },
+                    _ ) as extension)  ->
+    let ext_expr = Extensions.extension_expr_of_payload ~loc extension in
+    type_extension ~loc ~env ~ty_expected ~sexp ~with_explanation ext_expr
   | Pexp_extension ext ->
     raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
@@ -5170,7 +5186,7 @@ and type_andops env sarg sands expected_ty =
   let let_arg, rev_ands = loop env sarg (List.rev sands) expected_ty in
   let_arg, List.rev rev_ands
 
-  and type_extension ~loc ~env ~ty_expected ~sexp = function
+  and type_extension ~loc ~env ~ty_expected ~sexp ~with_explanation = function
   | Extensions.Eexp_list_comprehension (sbody, comp_typell) ->
     if !Clflags.principal then begin_def ();
     let without_list_ty = Ctype.newvar ()  in
@@ -5211,7 +5227,43 @@ and type_andops env sarg sands expected_ty =
       exp_type = instance (Predef.type_array body.exp_type);
       exp_attributes = sexp.pexp_attributes;
       exp_env = env }
+  | Extensions.Eexp_arr_slice_extension (sargl) ->
+    let argl = type_array
+       ~loc ~env ~ty_expected ~with_explanation sargl
+    in
+    re {
+      exp_desc = Texp_array_slice argl;
+      exp_loc = loc; exp_extra = [];
+      exp_type = instance ty_expected;
+      exp_attributes = sexp.pexp_attributes;
+      exp_env = env }
+  | Extensions.Eexp_sub_array(sarr, slow, shigh) ->
+    let low = type_expect env slow
+          (mk_expected ~explanation:For_loop_start_index Predef.type_int) in
+    let high = type_expect env shigh
+        (mk_expected ~explanation:For_loop_stop_index Predef.type_int) in
+    let ty = newvar() in
+    let to_unify = Predef.type_array ty in
+    with_explanation (fun () ->
+      unify_exp_types loc env to_unify (generic_instance ty_expected));
+    let arr = type_expect env sarr (mk_expected to_unify) in
+    re {
+      exp_desc = Texp_sub_array(arr, low, high);
+      exp_loc = loc; exp_extra = [];
+      exp_type = instance ty_expected;
+      exp_attributes = sexp.pexp_attributes;
+      exp_env = env }
 
+  and type_array ~loc ~env ~ty_expected ~with_explanation sargl = 
+    let ty = newgenvar() in
+    let to_unify = Predef.type_array ty in
+    with_explanation (fun () ->
+      unify_exp_types loc env to_unify (generic_instance ty_expected));
+    List.map (function 
+      | Extensions.Element e -> Element (type_expect env e (mk_expected ty))
+      | Extensions.Slice e -> Slice (type_expect env e (mk_expected to_unify))
+    ) sargl
+    
   and type_comprehension_clause ~body_env ~env ~loc ~container_type
       ~(comp_type : Extensions.comprehension_clause) =
     let comp, env = match comp_type with

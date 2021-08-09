@@ -187,6 +187,8 @@ let classify_expression : Typedtree.expression -> sd =
     | Texp_instvar _
     | Texp_tuple _
     | Texp_array _
+    | Texp_array_slice _
+    | Texp_sub_array _ 
     | Texp_variant _
     | Texp_setfield _
     | Texp_while _
@@ -620,6 +622,8 @@ let rec expression : Typedtree.expression -> term_judg =
             Guard
       in
       list expression exprs << array_mode
+    | Texp_array_slice _ -> assert false
+    | Texp_sub_array _ -> assert false
     | Texp_construct (_, desc, exprs) ->
       let access_constructor =
         match desc.cstr_tag with

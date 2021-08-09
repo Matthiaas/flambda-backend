@@ -307,6 +307,8 @@ let expr sub x =
         )
     | Texp_array list ->
         Texp_array (List.map (sub.expr sub) list)
+    | Texp_array_slice _ -> assert false
+    | Texp_sub_array _ -> assert false
     | Texp_ifthenelse (exp1, exp2, expo) ->
         Texp_ifthenelse (
           sub.expr sub exp1,

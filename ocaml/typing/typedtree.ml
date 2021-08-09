@@ -117,6 +117,8 @@ and expression_desc =
   | Texp_setfield of
       expression * Longident.t loc * label_description * expression
   | Texp_array of expression list
+  | Texp_array_slice of array_element_kind list
+  | Texp_sub_array of expression * expression * expression
   | Texp_ifthenelse of expression * expression * expression option
   | Texp_sequence of expression * expression
   | Texp_while of expression * expression
@@ -167,6 +169,10 @@ and comprehension_clause =
   | From_to of Ident.t * Parsetree.pattern *
       expression * expression * direction_flag
   | In of pattern * expression
+
+and array_element_kind = 
+  | Element of expression
+  | Slice of expression
 
 and 'k case =
     {

@@ -2248,8 +2248,15 @@ simple_expr:
       { unclosed "(" $loc($1) ")" $loc($3) }
   | LPAREN seq_expr type_constraint RPAREN
       { mkexp_constraint ~loc:$sloc $2 $3 }
-  | simple_expr DOT LPAREN seq_expr RPAREN
-      { array_get ~loc:$sloc $1 $4 }
+  | simple_expr DOT LPAREN seq_expr DOTDOT seq_expr RPAREN 
+      {
+        let expr = 
+          Extensions.payload_of_extension_expr ~loc:(make_loc $sloc) 
+            (Extensions.Eexp_sub_array($1, $4, $6)) in
+        mkexp ~loc:($loc($3)) (Pexp_extension( expr))
+      }
+  | simple_expr DOT LPAREN seq_expr RPAREN 
+    { array_get ~loc:$sloc $1 $4  }
   | simple_expr DOT LPAREN seq_expr error
       { unclosed "(" $loc($3) ")" $loc($5) }
   | simple_expr DOT LBRACKET seq_expr RBRACKET
@@ -2383,9 +2390,21 @@ comprehension_tail(bracket):
                         (Pexp_record(fields, exten))) }
   | mod_longident DOT LBRACE record_expr_content error
       { unclosed "{" $loc($3) "}" $loc($5) }
-  | LBRACKETBAR expr_semi_list BARRBRACKET
-      { Pexp_array($2) }
-  | LBRACKETBAR expr_semi_list error
+  | LBRACKETBAR ls = dotdotexpr_semi_list BARRBRACKET
+      { 
+        let unwrap el acc =  
+          Option.bind acc (fun acc -> 
+          match el with 
+            | Extensions.Element a -> Some(a::acc)
+            | _ -> None) 
+        in 
+        (match List.fold_right unwrap ls (Some []) with 
+        | Some ls -> Pexp_array(ls)
+        | None -> 
+          Pexp_extension( Extensions.payload_of_extension_expr 
+            ~loc:(make_loc $sloc) (Eexp_arr_slice_extension(ls))))
+      }
+  | LBRACKETBAR dotdotexpr_semi_list error
       { unclosed "[|" $loc($1) "|]" $loc($3) }
   | LBRACKETBAR BARRBRACKET
       { Pexp_array [] }
@@ -2614,8 +2633,17 @@ record_expr_content:
         in
         label, e }
 ;
+dotdotexpr:
+| expr  { Extensions.Element($1)}
+| DOTDOT expr { Extensions.Slice($2)}
+
+;
 %inline expr_semi_list:
   es = separated_or_terminated_nonempty_list(SEMI, expr)
+    { es }
+;
+%inline dotdotexpr_semi_list:
+  es = separated_or_terminated_nonempty_list(SEMI, dotdotexpr)
     { es }
 ;
 type_constraint:

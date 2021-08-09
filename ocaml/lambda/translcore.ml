@@ -448,6 +448,16 @@ and transl_exp0 ~in_new_scope ~scopes e =
         Lprim(Pmakearray (kind, Mutable), ll,
               of_location ~scopes e.exp_loc)
       end
+  | Texp_array_slice list ->
+    let loc = of_location ~scopes e.exp_loc in
+    let kind = array_kind e in
+      Translcomprehension.transl_arr_slice_extension 
+        ~transl_exp ~loc ~scopes ~kind list 
+  | Texp_sub_array(arr, low, high) -> 
+    let loc = of_location ~scopes e.exp_loc in 
+    let kind = array_kind e in
+      Translcomprehension.transl_sub_arr 
+        ~transl_exp ~loc ~scopes ~kind arr low high 
   | Texp_ifthenelse(cond, ifso, Some ifnot) ->
       Lifthenelse(transl_exp ~scopes cond,
                   event_before ~scopes ifso (transl_exp ~scopes ifso),
